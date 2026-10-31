@@ -1,0 +1,266 @@
+package app.ammusic.data.lyrics
+
+import android.util.Log
+import app.ammusic.youtube.model.YtTrack
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.FormBody
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.util.concurrent.TimeUnit
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlin.math.abs
+
+@Serializable
+private data class TtmlResponse(val ttml: String? = null)
+
+@Serializable
+private data class LrcLibEntry(
+    val duration: Double? = null,
+    val instrumental: Boolean = false,
+    val plainLyrics: String? = null,
+    val syncedLyrics: String? = null,
+)
+
+private val TitleNoise = Regex(
+    "\\s*[(\\[][^)\\]]*(official|officiel|video|vidéo|clip|audio|lyric|paroles|visuali[sz]er|remaster)[^)\\]]*[)\\]]",
+    RegexOption.IGNORE_CASE,
+)
+
+private const val Tag = "AmLyrics"
+
+private val LyricsPlusServers = listOf("https://lyricsplus.prjktla.my.id", "https://lyricsplus.binimum.org")
+
+@Serializable
+private data class PlusWord(val time: Long = 0, val duration: Long = 0, val text: String = "", val isBackground: Boolean = false)
+
+@Serializable
+private data class PlusLine(val time: Long = 0, val duration: Long = 0, val text: String = "", val syllabus: List<PlusWord>? = null)
+
+@Serializable
+private data class PlusResponse(val lyrics: List<PlusLine> = emptyList())
+
+@Singleton
+class LyricsRepository @Inject constructor(@param:ApplicationContext context: Context) {
+    private val kept = File(context.filesDir, "lyrics").apply { mkdirs() }
+    private val client = OkHttpClient.Builder().callTimeout(12, TimeUnit.SECONDS).build()
+    private val json = Json { ignoreUnknownKeys = true }
+    private val cache = object : LinkedHashMap<String, Lyrics>(32, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Lyrics>?) = size > 30
+    }
+
+    suspend fun keep(track: YtTrack) = withContext(Dispatchers.IO) {
+        val found = find(track, (track.durationSeconds ?: 0) * 1000L)
+        if (found == Lyrics.None) return@withContext
+        runCatching { File(kept, "${track.id}.json").writeText(json.encodeToString(StoredLyrics.serializer(), found.stored())) }
+            .onFailure { Log.w(Tag, "paroles non gardées : ${it.javaClass.simpleName}") }
+    }
+
+    fun isKept(trackId: String): Boolean = File(kept, "$trackId.json").exists()
+
+    fun forget(trackIds: Collection<String>) {
+        trackIds.forEach { File(kept, "$it.json").delete() }
+    }
+
+    private fun readKept(trackId: String): Lyrics? {
+        val file = File(kept, "$trackId.json")
+        if (!file.exists()) return null
+        return runCatching { json.decodeFromString(StoredLyrics.serializer(), file.readText()).lyrics() }.getOrNull()
+    }
+
+    private val translations = object : LinkedHashMap<String, Translation>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Translation>?) = size > 12
+    }
+
+    suspend fun translate(lines: List<String>, target: String): Translation? = withContext(Dispatchers.IO) {
+        val wanted = lines.withIndex().filter { it.value.isNotBlank() }
+        if (wanted.isEmpty()) return@withContext null
+        val key = target + ":" + lines.hashCode()
+        synchronized(translations) { translations[key] }?.let { return@withContext it }
+        val url = "https://translate.googleapis.com/translate_a/t".toHttpUrl().newBuilder()
+            .addQueryParameter("client", "gtx")
+            .addQueryParameter("sl", "auto")
+            .addQueryParameter("tl", target)
+            .build()
+        val form = FormBody.Builder().apply { wanted.forEach { add("q", it.value) } }.build()
+        val request = Request.Builder().url(url).post(form).build()
+        val body = runCatching {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) Log.w(Tag, "traduction : réponse ${response.code}")
+                if (response.isSuccessful) response.body?.string() else null
+            }
+        }.onFailure { Log.w(Tag, "traduction : ${it.javaClass.simpleName}") }.getOrNull() ?: return@withContext null
+        val parsed = runCatching { parseTranslation(body, wanted.size, target) }.onFailure { Log.w(Tag, "traduction illisible") }.getOrNull()
+        if (parsed == null) {
+            Log.w(Tag, "traduction : réponse inattendue")
+            return@withContext null
+        }
+        val result = if (parsed.sameLanguage) {
+            parsed
+        } else {
+            val byLine = wanted.map { it.index }.zip(parsed.lines).toMap()
+            Translation(List(lines.size) { byLine[it].orEmpty() }, sameLanguage = false)
+        }
+        Log.d(Tag, "traduction : ${wanted.size} lignes${if (result.sameLanguage) ", déjà dans la langue" else ""}")
+        synchronized(translations) { translations[key] = result }
+        result
+    }
+
+    suspend fun find(track: YtTrack, durationMs: Long): Lyrics = withContext(Dispatchers.IO) {
+        synchronized(cache) { cache[track.id] }?.let { return@withContext it }
+        readKept(track.id)?.let { stored ->
+            synchronized(cache) { cache[track.id] = stored }
+            return@withContext stored
+        }
+        val title = track.title.replace(TitleNoise, "").trim().ifEmpty { track.title }
+        val artist = track.artists.substringBefore(", ")
+        val seconds = (durationMs / 1000).toInt()
+
+        val (reference, detailed) = coroutineScope {
+            val reference = async { lrcLib(title, artist, track.album, seconds) }
+            val detailed = async { lyricsPlus(title, artist, track.album, seconds) ?: betterLyrics(title, artist, track.album, seconds) }
+            reference.await() to detailed.await()
+        }
+        val found = when {
+            reference is Lyrics.Synced && detailed != null && detailed.lines.any { it.words.isNotEmpty() } ->
+                alignTo(reference.lines, detailed.lines)?.let(Lyrics::Synced) ?: reference
+            reference is Lyrics.Synced -> reference
+            detailed != null -> detailed
+            else -> reference ?: Lyrics.None
+        }
+        val detail = when (found) {
+            is Lyrics.Synced -> if (found.lines.any { it.words.isNotEmpty() }) "mot à mot" else "ligne par ligne"
+            is Lyrics.Plain -> "texte seul"
+            Lyrics.None -> "rien trouvé"
+        }
+        Log.d(Tag, "« $title » — $artist : $detail")
+        if (found != Lyrics.None) synchronized(cache) { cache[track.id] = found }
+        found
+    }
+
+    private fun lyricsPlus(title: String, artist: String, album: String?, seconds: Int): Lyrics.Synced? {
+        for (server in LyricsPlusServers) {
+            val url = "$server/v2/lyrics/get".toHttpUrl().newBuilder()
+                .addQueryParameter("title", title)
+                .addQueryParameter("artist", artist)
+                .apply {
+                    if (seconds > 0) addQueryParameter("duration", seconds.toString())
+                    if (!album.isNullOrBlank()) addQueryParameter("album", album)
+                }
+                .build()
+            val body = get(url) ?: continue
+            val lines = runCatching { json.decodeFromString<PlusResponse>(body).lyrics }.getOrNull().orEmpty().map { line ->
+                val words = line.syllabus.orEmpty().filterNot { it.isBackground }.map { LyricWord(it.text, it.time, it.time + it.duration) }
+                LyricLine(line.time, line.text.trim(), words)
+            }
+            if (lines.isNotEmpty()) return Lyrics.Synced(lines.sortedBy { it.startMs })
+        }
+        return null
+    }
+
+    private fun betterLyrics(title: String, artist: String, album: String?, seconds: Int): Lyrics.Synced? {
+        val url = "https://lyrics-api.boidu.dev/getLyrics".toHttpUrl().newBuilder()
+            .addQueryParameter("s", title)
+            .addQueryParameter("a", artist)
+            .apply {
+                if (seconds > 0) addQueryParameter("d", seconds.toString())
+                if (!album.isNullOrBlank()) addQueryParameter("al", album)
+            }
+            .build()
+        val body = get(url) ?: return null
+        val ttml = runCatching { json.decodeFromString<TtmlResponse>(body).ttml }
+            .onFailure { Log.w(Tag, "BetterLyrics : réponse illisible (${it.javaClass.simpleName})") }
+            .getOrNull() ?: return null
+        val lines = parseTtml(ttml)
+        Log.d(Tag, "BetterLyrics : ${ttml.length} caractères, ${lines.size} lignes")
+        return lines.takeIf { it.isNotEmpty() }?.let(Lyrics::Synced)
+    }
+
+    private fun lrcLib(title: String, artist: String, album: String?, seconds: Int): Lyrics? {
+        val exact = if (seconds > 0) {
+            val url = "https://lrclib.net/api/get".toHttpUrl().newBuilder()
+                .addQueryParameter("track_name", title)
+                .addQueryParameter("artist_name", artist)
+                .addQueryParameter("album_name", album.orEmpty())
+                .addQueryParameter("duration", seconds.toString())
+                .build()
+            get(url)?.let { runCatching { json.decodeFromString<LrcLibEntry>(it) }.getOrNull() }
+        } else {
+            null
+        }
+        exact?.toLyrics()?.let { return it }
+
+        val url = "https://lrclib.net/api/search".toHttpUrl().newBuilder()
+            .addQueryParameter("track_name", title)
+            .addQueryParameter("artist_name", artist)
+            .build()
+        val candidates = get(url)?.let { runCatching { json.decodeFromString<List<LrcLibEntry>>(it) }.getOrNull() }.orEmpty()
+            .filter { seconds <= 0 || it.duration == null || abs(it.duration - seconds) <= 5 }
+            .sortedBy { if (seconds > 0 && it.duration != null) abs(it.duration - seconds) else 0.0 }
+        return candidates.firstOrNull { !it.syncedLyrics.isNullOrBlank() }?.toLyrics() ?: candidates.firstNotNullOfOrNull { it.toLyrics() }
+    }
+
+    private fun LrcLibEntry.toLyrics(): Lyrics? {
+        syncedLyrics?.takeIf { it.isNotBlank() }?.let(::parseLrc)?.takeIf { it.isNotEmpty() }?.let { return Lyrics.Synced(it) }
+        return plainLyrics?.takeIf { it.isNotBlank() }?.let(Lyrics::Plain)
+    }
+
+    private fun get(url: HttpUrl): String? = runCatching {
+        val request = Request.Builder().url(url).header("User-Agent", "AM Music (appli personnelle)").build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) Log.d(Tag, "${url.host} : réponse ${response.code}")
+            if (response.isSuccessful) response.body?.string() else null
+        }
+    }.onFailure { Log.w(Tag, "${url.host} : ${it.javaClass.simpleName}") }.getOrNull()
+}
+
+class Translation(val lines: List<String>, val sameLanguage: Boolean)
+
+internal fun parseTranslation(body: String, expected: Int, target: String): Translation? {
+    val root = Json.parseToJsonElement(body)
+    val items = when {
+        root is JsonArray && root.all { it is JsonArray } -> root.map { it.jsonArray }
+        root is JsonArray -> listOf(root)
+        else -> return null
+    }
+    val texts = items.map { it.getOrNull(0)?.jsonPrimitive?.contentOrNull.orEmpty().trim() }
+    val sources = items.mapNotNull { it.getOrNull(1)?.jsonPrimitive?.contentOrNull?.substringBefore('-') }
+    if (texts.size != expected) return null
+    if (sources.isNotEmpty() && sources.count { it == target } * 2 > sources.size) return Translation(emptyList(), sameLanguage = true)
+    return Translation(texts, sameLanguage = false)
+}
+
+@Serializable
+private data class StoredWord(val text: String, val startMs: Long, val endMs: Long)
+
+@Serializable
+private data class StoredLine(val startMs: Long, val text: String, val words: List<StoredWord> = emptyList())
+
+@Serializable
+private data class StoredLyrics(val plain: String? = null, val lines: List<StoredLine> = emptyList())
+
+private fun Lyrics.stored(): StoredLyrics = when (this) {
+    is Lyrics.Synced -> StoredLyrics(lines = lines.map { line -> StoredLine(line.startMs, line.text, line.words.map { StoredWord(it.text, it.startMs, it.endMs) }) })
+    is Lyrics.Plain -> StoredLyrics(plain = text)
+    Lyrics.None -> StoredLyrics()
+}
+
+private fun StoredLyrics.lyrics(): Lyrics = when {
+    lines.isNotEmpty() -> Lyrics.Synced(lines.map { line -> LyricLine(line.startMs, line.text, line.words.map { LyricWord(it.text, it.startMs, it.endMs) }) })
+    plain != null -> Lyrics.Plain(plain)
+    else -> Lyrics.None
+}
