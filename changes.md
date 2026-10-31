@@ -76,3 +76,11 @@
 - Detected connected Samsung Galaxy A32 (`Rayane's A32`) via MTP storage.
 - Transferred `RMusic.apk` (54.9 MB) directly to the phone's **Download** folder (`Internal storage\Download\RMusic.apk`).
 - Ready for immediate one-tap installation on the device.
+
+## GitHub Repository & Release Publication
+- Initialized clean git repository with comprehensive `.gitignore` filtering out build caches, APKs, and secrets.
+- Crafted a complete, modern `README.md` featuring the 3D logo, feature badges, screenshot gallery, building guide, and credits.
+- Created public GitHub repository `RMusic` under user account `zirharayane` (`https://github.com/zirharayane/RMusic`).
+- Pushed complete source code to `main` branch.
+- Created initial GitHub release **`v1.0.0`** (`RMusic v1.0.0 — Initial Release`).
+- Uploaded release binary asset **`RMusic.apk`** (54.93 MB) directly to the release page.
