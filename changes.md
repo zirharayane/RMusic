@@ -310,3 +310,18 @@
   - Executed `gradlew assembleDebug` (Build successful).
   - Verified APK badging: `package: name='app.ammusic' versionCode='6' versionName='1.5.0'`.
   - Copied updated APK to `E:\Projects\RMusic web\binaries\RMusic.apk`.
+
+## Production Release Publication (v1.5.1)
+- **Database Permissions Verified**:
+  - Verified Supabase `public.liked_tracks` endpoint returns HTTP 200 with empty array (`[]`) following user execution of `GRANT` statements. Error 42501 eliminated.
+- **OTA Manifest Published (`music.rayane.top`)**:
+  - Updated `rmusic-update.json` with `versionCode: 7`, `versionName: "1.5.1"`, and release changelog.
+  - Rebuilt web distribution and pushed commit to `RMusic-web` on GitHub.
+  - Verified live endpoint `https://music.rayane.top/rmusic-update.json` serving v1.5.1.
+- **GitHub Release v1.5.1 Created & Assets Uploaded**:
+  - Created and pushed git tag `v1.5.1`.
+  - Pushed all source modifications to `main` branch.
+  - Published GitHub release **`v1.5.1`** (`RMusic v1.5.1 - Cloud Sync & In-App Updater Fix`).
+  - Uploaded fresh Android release binary **`RMusic.apk`** (57.7 MB, versionCode 7) to release assets.
+  - Uploaded Windows desktop installer **`RMusic-Setup.exe`** (76.3 MB) to release assets.
+  - Verified `https://github.com/zirharayane/RMusic/releases/latest/download/RMusic.apk` resolves to `v1.5.1`.
