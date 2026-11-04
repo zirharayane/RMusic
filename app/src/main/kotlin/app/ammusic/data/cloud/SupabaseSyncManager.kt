@@ -20,6 +20,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -122,11 +123,12 @@ class SupabaseSyncManager @Inject constructor(
     }
 
     private fun observeAutoSync() {
-        // 1. Auto-push Playlists on change (instant push)
+        // 1. Auto-push Playlists on change (batch upsert, debounced)
         scope.launch {
-            library.playlists.collect { playlists ->
+            library.playlists.debounce(2_000).collect { playlists ->
                 val user = _currentUser.value ?: return@collect
                 val token = prefs.getString("access_token", null) ?: return@collect
+                if (playlists.isEmpty()) return@collect
                 for (p in playlists) {
                     try {
                         val tracks = library.dao.playlistTracks(p.id).first()
@@ -159,11 +161,7 @@ class SupabaseSyncManager @Inject constructor(
                             .header("Prefer", "resolution=merge-duplicates")
                             .post(body)
                             .build()
-                        client.newCall(request).execute().use { res ->
-                            if (!res.isSuccessful) {
-                                Log.w("RMusicSync", "Playlist sync warning (${res.code}): ${res.body?.string()}")
-                            }
-                        }
+                        client.newCall(request).execute().close()
                     } catch (e: Exception) {
                         Log.e("RMusicSync", "Playlist sync failed: ${e.message}")
                     }
@@ -171,14 +169,15 @@ class SupabaseSyncManager @Inject constructor(
             }
         }
 
-        // 2. Auto-push Liked songs on change (instant push)
+        // 2. Auto-push Liked songs on change (single batch upsert, debounced)
         scope.launch {
-            library.liked.collect { likedTracks ->
+            library.liked.debounce(2_000).collect { likedTracks ->
                 val user = _currentUser.value ?: return@collect
                 val token = prefs.getString("access_token", null) ?: return@collect
-                for (t in likedTracks) {
-                    try {
-                        val cloudLiked = CloudLiked(
+                if (likedTracks.isEmpty()) return@collect
+                try {
+                    val items = likedTracks.map { t ->
+                        CloudLiked(
                             user_id = user.id,
                             track_id = t.id,
                             title = t.title,
@@ -187,56 +186,51 @@ class SupabaseSyncManager @Inject constructor(
                             duration_seconds = t.durationSeconds ?: 0,
                             added_at = System.currentTimeMillis(),
                         )
-                        val body = json.encodeToString(cloudLiked).toRequestBody(jsonMediaType)
-                        val request = Request.Builder()
-                            .url("$supabaseUrl/rest/v1/liked_tracks")
-                            .header("apikey", supabaseAnonKey)
-                            .header("Authorization", "Bearer $token")
-                            .header("Prefer", "resolution=merge-duplicates")
-                            .post(body)
-                            .build()
-                        client.newCall(request).execute().use { res ->
-                            if (!res.isSuccessful) {
-                                Log.w("RMusicSync", "Liked sync warning (${res.code}): ${res.body?.string()}")
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Log.e("RMusicSync", "Liked track sync failed: ${e.message}")
                     }
+                    val body = json.encodeToString(items).toRequestBody(jsonMediaType)
+                    val request = Request.Builder()
+                        .url("$supabaseUrl/rest/v1/liked_tracks")
+                        .header("apikey", supabaseAnonKey)
+                        .header("Authorization", "Bearer $token")
+                        .header("Prefer", "resolution=merge-duplicates")
+                        .post(body)
+                        .build()
+                    client.newCall(request).execute().close()
+                    Log.i("RMusicSync", "Auto-synced ${items.size} liked tracks in 1 batch")
+                } catch (e: Exception) {
+                    Log.e("RMusicSync", "Liked track batch sync failed: ${e.message}")
                 }
             }
         }
 
-        // 3. Auto-push Favorite Artists on change (instant push)
+        // 3. Auto-push Favorite Artists on change (single batch upsert, debounced)
         scope.launch {
-            library.artists.collect { artistsList ->
+            library.artists.debounce(2_000).collect { artistsList ->
                 val user = _currentUser.value ?: return@collect
                 val token = prefs.getString("access_token", null) ?: return@collect
-                for (a in artistsList) {
-                    try {
-                        val cloudArtist = CloudArtist(
+                if (artistsList.isEmpty()) return@collect
+                try {
+                    val items = artistsList.map { a ->
+                        CloudArtist(
                             user_id = user.id,
                             artist_id = a.id,
                             name = a.title,
                             thumbnail = a.thumbnail,
                             added_at = System.currentTimeMillis(),
                         )
-                        val body = json.encodeToString(cloudArtist).toRequestBody(jsonMediaType)
-                        val request = Request.Builder()
-                            .url("$supabaseUrl/rest/v1/fav_artists")
-                            .header("apikey", supabaseAnonKey)
-                            .header("Authorization", "Bearer $token")
-                            .header("Prefer", "resolution=merge-duplicates")
-                            .post(body)
-                            .build()
-                        client.newCall(request).execute().use { res ->
-                            if (!res.isSuccessful) {
-                                Log.w("RMusicSync", "Artist sync warning (${res.code}): ${res.body?.string()}")
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Log.e("RMusicSync", "Artist sync failed: ${e.message}")
                     }
+                    val body = json.encodeToString(items).toRequestBody(jsonMediaType)
+                    val request = Request.Builder()
+                        .url("$supabaseUrl/rest/v1/fav_artists")
+                        .header("apikey", supabaseAnonKey)
+                        .header("Authorization", "Bearer $token")
+                        .header("Prefer", "resolution=merge-duplicates")
+                        .post(body)
+                        .build()
+                    client.newCall(request).execute().close()
+                    Log.i("RMusicSync", "Auto-synced ${items.size} artists in 1 batch")
+                } catch (e: Exception) {
+                    Log.e("RMusicSync", "Artist batch sync failed: ${e.message}")
                 }
             }
         }
@@ -251,7 +245,7 @@ class SupabaseSyncManager @Inject constructor(
         _currentUser.value = CloudUser(uid, email, provider, avatar, name)
     }
 
-    fun getOAuthUrl(provider: String, redirectUri: String = "rmusic://auth-callback"): String {
+    fun getOAuthUrl(provider: String, redirectUri: String = "https://music.rayane.top/auth/callback"): String {
         return "$supabaseUrl/auth/v1/authorize?provider=$provider&redirect_to=${Uri.encode(redirectUri)}"
     }
 
@@ -578,20 +572,22 @@ class SupabaseSyncManager @Inject constructor(
             }
         }
 
-        // Push Liked Tracks
+        // Push Liked Tracks in single batch
         val likedTracks = library.liked.first()
-        for (t in likedTracks) {
+        if (likedTracks.isNotEmpty()) {
             try {
-                val cloudLiked = CloudLiked(
-                    user_id = user.id,
-                    track_id = t.id,
-                    title = t.title,
-                    artist = t.artists,
-                    thumbnail = t.thumbnail,
-                    duration_seconds = t.durationSeconds ?: 0,
-                    added_at = System.currentTimeMillis(),
-                )
-                val body = json.encodeToString(cloudLiked).toRequestBody(jsonMediaType)
+                val items = likedTracks.map { t ->
+                    CloudLiked(
+                        user_id = user.id,
+                        track_id = t.id,
+                        title = t.title,
+                        artist = t.artists,
+                        thumbnail = t.thumbnail,
+                        duration_seconds = t.durationSeconds ?: 0,
+                        added_at = System.currentTimeMillis(),
+                    )
+                }
+                val body = json.encodeToString(items).toRequestBody(jsonMediaType)
                 val request = Request.Builder()
                     .url("$supabaseUrl/rest/v1/liked_tracks")
                     .header("apikey", supabaseAnonKey)
@@ -599,28 +595,27 @@ class SupabaseSyncManager @Inject constructor(
                     .header("Prefer", "resolution=merge-duplicates")
                     .post(body)
                     .build()
-                client.newCall(request).execute().use { res ->
-                    if (!res.isSuccessful) {
-                        Log.w("RMusicSync", "Push liked track failed (${res.code}): ${res.body?.string()}")
-                    }
-                }
+                client.newCall(request).execute().close()
+                Log.i("RMusicSync", "Pushed ${items.size} local liked tracks to Supabase in 1 batch")
             } catch (e: Exception) {
-                Log.e("RMusicSync", "Push liked track exception: ${e.message}")
+                Log.e("RMusicSync", "Push liked tracks batch exception: ${e.message}")
             }
         }
 
-        // Push Favorite Artists
+        // Push Favorite Artists in single batch
         val artistsList = library.artists.first()
-        for (a in artistsList) {
+        if (artistsList.isNotEmpty()) {
             try {
-                val cloudArtist = CloudArtist(
-                    user_id = user.id,
-                    artist_id = a.id,
-                    name = a.title,
-                    thumbnail = a.thumbnail,
-                    added_at = System.currentTimeMillis(),
-                )
-                val body = json.encodeToString(cloudArtist).toRequestBody(jsonMediaType)
+                val items = artistsList.map { a ->
+                    CloudArtist(
+                        user_id = user.id,
+                        artist_id = a.id,
+                        name = a.title,
+                        thumbnail = a.thumbnail,
+                        added_at = System.currentTimeMillis(),
+                    )
+                }
+                val body = json.encodeToString(items).toRequestBody(jsonMediaType)
                 val request = Request.Builder()
                     .url("$supabaseUrl/rest/v1/fav_artists")
                     .header("apikey", supabaseAnonKey)
@@ -628,13 +623,10 @@ class SupabaseSyncManager @Inject constructor(
                     .header("Prefer", "resolution=merge-duplicates")
                     .post(body)
                     .build()
-                client.newCall(request).execute().use { res ->
-                    if (!res.isSuccessful) {
-                        Log.w("RMusicSync", "Push artist failed (${res.code}): ${res.body?.string()}")
-                    }
-                }
+                client.newCall(request).execute().close()
+                Log.i("RMusicSync", "Pushed ${items.size} local artists to Supabase in 1 batch")
             } catch (e: Exception) {
-                Log.e("RMusicSync", "Push artist exception: ${e.message}")
+                Log.e("RMusicSync", "Push artists batch exception: ${e.message}")
             }
         }
     }

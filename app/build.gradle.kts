@@ -16,8 +16,8 @@ android {
         applicationId = "app.ammusic"
         minSdk = 28
         targetSdk = 36
-        versionCode = 10
-        versionName = "1.5.4"
+        versionCode = 11
+        versionName = "2.1"
     }
 
     val keystoreFile = rootProject.file("keystore.properties")

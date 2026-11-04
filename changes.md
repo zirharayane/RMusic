@@ -1,5 +1,17 @@
 # Changes Log
 
+## v2.1 — Cross-Device Cloud Sync Overhaul & Fast Batch Network Engine
+- **Debounced Batch Cloud Upload**:
+  - Replaced sequential 1-by-1 HTTP request loop in `observeAutoSync` and `pushLocalChanges` with unified JSON array batch upsert (`POST /rest/v1/liked_tracks` and `POST /rest/v1/fav_artists`).
+  - Added `debounce(2_000)` to prevent excessive network spam during rapid library edits.
+  - Reduced network calls from $N$ separate requests (which triggered Supabase HTTP 429 rate limits) to 1 fast atomic request.
+- **Improved Discord OAuth Flow**:
+  - Pointed default OAuth redirect to `https://music.rayane.top/auth/callback` to ensure smooth handoff from web browser to mobile deep link (`rmusic://auth-callback`).
+- **Version Bump**:
+  - Updated `versionCode = 11`, `versionName = "2.1"` in `app/build.gradle.kts`.
+  - Compiled release-ready debug APK: `app/build/outputs/apk/debug/app-debug.apk` (57.7 MB) and synced to `RMusic.apk`.
+  - Configured OTA update manifest `rmusic-update.json` on `https://music.rayane.top` to auto-notify mobile users.
+
 ## Initial Project Audit & Exploration
 - Explored complete repository structure and code architecture across both modules (`:app` and `:youtube`).
 - Investigated dependencies, design patterns, playback pipeline, data storage, and external integrations.
