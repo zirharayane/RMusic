@@ -98,7 +98,7 @@ class LibraryViewModel @Inject constructor(
                 library.announce(tr("Playlist importée !", "Playlist imported!"))
                 then(id)
             } else {
-                library.announce(tr("Échec de l'importation", "Import failed"))
+                library.announce(tr("Échec de l'importation", "Import failed"), failed = true)
             }
         }
     }

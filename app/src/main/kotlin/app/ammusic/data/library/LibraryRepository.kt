@@ -299,7 +299,7 @@ class LibraryRepository @Inject constructor(@ApplicationContext context: Context
         return call()
     }
 
-    fun announce(text: String) = notify(text)
+    fun announce(text: String, failed: Boolean = false) = notify(text, failed)
 
     private fun notify(text: String, failed: Boolean = false) {
         _notices.tryEmit(LibraryNotice(text, failed))
