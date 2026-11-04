@@ -327,3 +327,25 @@
   - Rebuilt APK: `app-debug.apk` (57.7 MB, versionCode 8).
   - Deployed `rmusic-update.json` with `versionCode: 8` (`v1.5.2`) to `music.rayane.top`.
   - Published GitHub release **`v1.5.2`** with updated `RMusic.apk` and `RMusic-Setup.exe`.
+
+
+## In-App Update Dropdown Banner & System Push Notifications (v1.5.3)
+- **Feature Additions**:
+  1. **In-App Update Dropdown Banner (`UpdateDropBanner.kt`, `AppRoot.kt`)**:
+     - Created `UpdateDropBanner`: an animated status-bar dropdown banner featuring spring animations (`slideInVertically` + `fadeIn`).
+     - Displays update title ("Update v1.5.3 available!"), changelog description, "Install" button with haptic feedback, and a dismiss button (`✕`).
+     - Displays live download progress using `ProgressRing` when downloading the update.
+     - Positioned at `Alignment.TopCenter` within `AppRoot` above all navigation screens, dropping down seamlessly when opening the app if an update is available.
+  2. **Android System Push Notification (`AppUpdateManager.kt`)**:
+     - Added `showSystemNotification(info: UpdateInfo)` in `AppUpdateManager`.
+     - Automatically fires an Android notification into the system drawer with `NotificationChannel("app_updates", "App Updates")` at `IMPORTANCE_HIGH`.
+     - Notification includes version details, changelog preview, and a pending intent opening `MainActivity`.
+     - Deduplication: uses `SharedPreferences("app_update_prefs")` (`last_notified_version`) so the notification fires once per new version and does not spam the user drawer.
+  3. **Library View Model & State Integration (`LibraryViewModels.kt`)**:
+     - Injected `AppUpdateManager` into `LibraryViewModel`.
+     - Exposed `updateAvailable`, `updateProgress`, `startUpdate()`, and `dismissUpdate()` for root-level Compose consumption.
+- **Verification & Deployment**:
+  - Bumped `versionCode = 9` and `versionName = "1.5.3"` in `app/build.gradle.kts`.
+  - Rebuilt debug APK: `app-debug.apk` (57.7 MB) and verified with `aapt2 dump badging` (`versionCode='9' versionName='1.5.3'`).
+  - Deployed `rmusic-update.json` (`versionCode: 9`, `v1.5.3`) to Cloudflare Workers (`music.rayane.top/rmusic-update.json`).
+  - Committed and pushed changes to both `RMusic-web` and `RMusic` mobile repositories.

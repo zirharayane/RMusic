@@ -11,6 +11,8 @@ import app.ammusic.youtube.model.YtSession
 import app.ammusic.youtube.model.YtTrack
 import app.ammusic.data.library.PlaylistImporter
 import app.ammusic.data.cloud.SupabaseSyncManager
+import app.ammusic.data.update.AppUpdateManager
+import app.ammusic.data.update.UpdateInfo
 import app.ammusic.youtube.model.YtAccount
 import app.ammusic.youtube.tr
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -55,7 +57,13 @@ class LibraryViewModel @Inject constructor(
     private val importer: PlaylistImporter,
     store: AccountStore,
     cloudSync: SupabaseSyncManager,
+    private val updateManager: AppUpdateManager,
 ) : ViewModel() {
+    val updateAvailable = updateManager.updateAvailable
+    val updateProgress = updateManager.downloadProgress
+    fun startUpdate(info: UpdateInfo) = updateManager.startDownloadAndInstall(info)
+    fun dismissUpdate() = updateManager.dismissUpdate()
+
     val account: StateFlow<YtAccount?> = combine(store.account, cloudSync.currentUser) { yt, cloud ->
         yt ?: cloud?.let { YtAccount(it.name ?: it.email ?: "Discord User", it.email, it.avatarUrl) }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)

@@ -63,6 +63,7 @@ import app.ammusic.ui.components.LocalSharedScope
 import app.ammusic.ui.components.MenuAction
 import app.ammusic.ui.components.MenuArtwork
 import app.ammusic.ui.components.NoticeHost
+import app.ammusic.ui.components.UpdateDropBanner
 import app.ammusic.ui.components.NowPlaying
 import app.ammusic.ui.components.RowCoverSize
 import app.ammusic.ui.components.Tab
@@ -171,6 +172,8 @@ fun AppRoot(
     var promptRequest by remember { mutableStateOf<PromptRequest?>(null) }
     val context = LocalContext.current
     val libraryViewModel: LibraryViewModel = hiltViewModel()
+    val updateAvailable by libraryViewModel.updateAvailable.collectAsStateWithLifecycle()
+    val updateProgress by libraryViewModel.updateProgress.collectAsStateWithLifecycle()
     val playlists by libraryViewModel.playlists.collectAsStateWithLifecycle()
     val likedIds by libraryViewModel.likedIds.collectAsStateWithLifecycle()
     val downloadStates by libraryViewModel.downloadStates.collectAsStateWithLifecycle()
@@ -335,6 +338,13 @@ fun AppRoot(
             MenuSheet(sheetRequest, onDismiss = { sheetRequest = null })
             TextPrompt(promptRequest, onDismiss = { promptRequest = null })
             NoticeHost(libraryViewModel.notices, Modifier.align(Alignment.TopCenter))
+            UpdateDropBanner(
+                info = updateAvailable,
+                progress = updateProgress,
+                onInstall = libraryViewModel::startUpdate,
+                onDismiss = libraryViewModel::dismissUpdate,
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
         }
     }
 }
