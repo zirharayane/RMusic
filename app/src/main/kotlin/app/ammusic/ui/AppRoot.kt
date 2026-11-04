@@ -245,7 +245,10 @@ fun AppRoot(
             },
             preview = { track, extras, from -> previewRequest = PreviewRequest(MenuRequest(track.title, track.artists, track.thumbnail, currentTrackActions(track) + extras), from) },
             sheet = { sheetRequest = it },
-            prompt = { title, initial, thumbnail, onConfirm -> promptRequest = PromptRequest(title, initial, thumbnail, onConfirm) },
+            prompt = { title, initial, thumbnail, onConfirm -> promptRequest = PromptRequest(title, initial, thumbnail, onConfirm = onConfirm) },
+            promptCustom = { title, initial, thumbnail, placeholder, actionLabel, onConfirm ->
+                promptRequest = PromptRequest(title, initial, thumbnail, placeholder, actionLabel, onConfirm)
+            },
             openLibrary = { kind -> if (kind == LibraryKind.Recap) nav.navigate(RecapRoute) else nav.navigate(LibraryListRoute(kind)) },
             openLogin = { nav.navigate(LoginRoute) { launchSingleTop = true } },
             openMood = { nav.navigate(BrowseRoute(it.browseId, it.params, it.title, artist = false)) },

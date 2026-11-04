@@ -96,10 +96,6 @@ class MainActivity : ComponentActivity() {
                 cloudSync.handleAuthCallback(
                     accessToken = accessToken,
                     refreshToken = refreshToken,
-                    user = CloudUser(
-                        id = params["user_id"] ?: "user",
-                        provider = params["provider"] ?: "oauth",
-                    )
                 )
             }
         }

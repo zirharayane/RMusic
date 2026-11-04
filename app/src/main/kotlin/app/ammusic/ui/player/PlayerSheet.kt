@@ -86,6 +86,8 @@ import app.ammusic.ui.components.AmIcons
 import app.ammusic.ui.components.AmText
 import app.ammusic.ui.components.Cover
 import app.ammusic.ui.components.pressable
+import app.ammusic.data.library.DownloadState
+import app.ammusic.ui.components.LocalDownloads
 import app.ammusic.ui.components.LocalActions
 import app.ammusic.ui.components.MenuAction
 import app.ammusic.ui.components.MenuRequest
@@ -325,6 +327,20 @@ private fun PlayerContent(
                     )
                 }
                 HeartButton(state.liked, player::toggleLike, tint = Color.White, likedTint = accent)
+                val downloads = LocalDownloads.current
+                val downloadState = downloads.states[track.id]
+                val isDownloaded = downloadState == DownloadState.Done
+                val isDownloading = downloadState == DownloadState.Queued || downloadState == DownloadState.Running
+                IconButton(
+                    icon = if (isDownloaded) AmIcons.Check else AmIcons.Download,
+                    label = if (isDownloaded) tr("Téléchargé", "Downloaded") else tr("Télécharger", "Download"),
+                    onClick = {
+                        if (!isDownloaded && !isDownloading) {
+                            actions.download(listOf(track))
+                        }
+                    },
+                    tint = if (isDownloaded) accent else if (isDownloading) accent.copy(alpha = 0.7f) else Color.White,
+                )
                 IconButton(
                     icon = AmIcons.More,
                     label = tr("Plus d'options", "More options"),

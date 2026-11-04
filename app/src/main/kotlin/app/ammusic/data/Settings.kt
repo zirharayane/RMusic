@@ -34,6 +34,7 @@ data class Settings(
     val normalizeVolume: Boolean = true,
     val sendHistory: Boolean = true,
     val crossfadeSeconds: Int = 0,
+    val autoDownloadLiked: Boolean = false,
 )
 
 val CacheChoicesMb = listOf(256, 512, 1024, 2048)
@@ -67,6 +68,7 @@ object UserSettings {
             normalizeVolume = stored.getBoolean("normalizeVolume", true),
             sendHistory = stored.getBoolean("sendHistory", true),
             crossfadeSeconds = stored.getInt("crossfadeSeconds", 0).coerceIn(0, 12),
+            autoDownloadLiked = stored.getBoolean("autoDownloadLiked", false),
         )
         appLanguage = current.language.ifEmpty { null }
     }
@@ -95,6 +97,7 @@ object UserSettings {
             putBoolean("normalizeVolume", next.normalizeVolume)
             putBoolean("sendHistory", next.sendHistory)
             putInt("crossfadeSeconds", next.crossfadeSeconds)
+            putBoolean("autoDownloadLiked", next.autoDownloadLiked)
         }
         if (languageChanged) {
             appLanguage = next.language.ifEmpty { null }

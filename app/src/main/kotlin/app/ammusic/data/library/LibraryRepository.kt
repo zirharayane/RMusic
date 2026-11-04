@@ -286,7 +286,7 @@ class LibraryRepository @Inject constructor(@ApplicationContext context: Context
         return tracks.distinctBy { it.id }
     }
 
-    private suspend fun refreshSummary(playlistId: String) {
+    internal suspend fun refreshSummary(playlistId: String) {
         val count = dao.playlistTrackCount(playlistId)
         val mirrored = isLocal(playlistId) || count > 0 || refreshedAt.containsKey(playlistId)
         if (mirrored) dao.setPlaylistSummary(playlistId, playlistCover(dao.leadingThumbnails(playlistId)), songCount(count))

@@ -46,7 +46,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.ammusic.ui.theme.AmTheme
 
-class PromptRequest(val title: String, val initial: String, val thumbnail: String?, val onConfirm: (String) -> Unit)
+class PromptRequest(
+    val title: String,
+    val initial: String,
+    val thumbnail: String?,
+    val placeholder: String? = null,
+    val actionLabel: String? = null,
+    val onConfirm: (String) -> Unit,
+)
 
 @Composable
 fun TextPrompt(request: PromptRequest?, onDismiss: () -> Unit) {
@@ -73,7 +80,7 @@ fun TextPrompt(request: PromptRequest?, onDismiss: () -> Unit) {
     var text by remember(current) { mutableStateOf(TextFieldValue(current.initial, TextRange(0, current.initial.length))) }
     val focus = remember { FocusRequester() }
     val valid = text.text.isNotBlank()
-    val confirmLabel = if (current.initial.isEmpty()) tr("Créer", "Create") else "OK"
+    val confirmLabel = current.actionLabel ?: if (current.initial.isEmpty()) tr("Créer", "Create") else "OK"
     val confirm = {
         if (valid) {
             current.onConfirm(text.text.trim())
@@ -152,7 +159,7 @@ fun TextPrompt(request: PromptRequest?, onDismiss: () -> Unit) {
                     Box(contentAlignment = Alignment.Center) {
                         if (text.text.isEmpty()) {
                             AmText(
-                                text = tr("Titre de la playlist", "Playlist title"),
+                                text = current.placeholder ?: tr("Titre de la playlist", "Playlist title"),
                                 style = AmTheme.type.section,
                                 color = colors.textTertiary,
                                 textAlign = TextAlign.Center,

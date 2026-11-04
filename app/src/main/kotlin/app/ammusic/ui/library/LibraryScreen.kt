@@ -167,7 +167,13 @@ fun LibraryListScreen(kind: String, viewModel: LibraryViewModel = hiltViewModel(
         }
     }
     val importPlaylist = {
-        actions.prompt(tr("Lien Spotify / YouTube", "Spotify or YouTube Link"), "", null) { url ->
+        actions.promptCustom(
+            tr("Importer une playlist", "Import playlist"),
+            "",
+            null,
+            tr("Collez le lien Spotify ou YouTube...", "Paste Spotify or YouTube link..."),
+            tr("Importer", "Import"),
+        ) { url ->
             viewModel.importPlaylist(url) { id ->
                 actions.open(YtPlaylist(id, tr("Playlist importée", "Imported Playlist"), "", null, editable = true), origin, ListCoverSize)
             }
@@ -195,14 +201,51 @@ fun LibraryListScreen(kind: String, viewModel: LibraryViewModel = hiltViewModel(
         leading = { IconButton(AmIcons.ChevronLeft, label = tr("Retour", "Back"), onClick = actions.back) },
         trailing = {
             when {
-                kind == LibraryKind.Liked && liked.isNotEmpty() ->
-                    IconButton(
-                        AmIcons.Download,
-                        label = tr("Tout télécharger", "Download all"),
-                        onClick = { actions.download(liked) },
-                        tint = AmTheme.colors.accent,
-                        iconSize = 22.dp,
-                    )
+                kind == LibraryKind.Liked -> {
+                    val autoOn = UserSettings.current.autoDownloadLiked
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(end = 4.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (autoOn) AmTheme.colors.accent else AmTheme.colors.surface)
+                                .pressable(haptic = true, label = if (autoOn) "Auto-download ON" else "Auto-download OFF") {
+                                    val next = !autoOn
+                                    UserSettings.update { copy(autoDownloadLiked = next) }
+                                    if (next && liked.isNotEmpty()) {
+                                        actions.download(liked)
+                                    }
+                                }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                AmIcon(
+                                    AmIcons.Download,
+                                    tint = if (autoOn) Color.White else AmTheme.colors.textSecondary,
+                                    size = 15.dp,
+                                )
+                                AmText(
+                                    text = if (autoOn) tr("AUTO ACTIF", "AUTO ON") else tr("AUTO", "AUTO"),
+                                    style = AmTheme.type.footnote.copy(fontWeight = FontWeight.Bold),
+                                    color = if (autoOn) Color.White else AmTheme.colors.textSecondary,
+                                )
+                            }
+                        }
+                        if (liked.isNotEmpty()) {
+                            IconButton(
+                                AmIcons.Download,
+                                label = tr("Tout télécharger", "Download all"),
+                                onClick = { actions.download(liked) },
+                                tint = AmTheme.colors.accent,
+                                iconSize = 22.dp,
+                            )
+                        }
+                    }
+                }
                 kind == LibraryKind.History && history.isNotEmpty() ->
                     IconButton(AmIcons.Trash, label = tr("Effacer l'historique", "Clear history"), onClick = viewModel::clearHistory, tint = AmTheme.colors.textSecondary)
             }

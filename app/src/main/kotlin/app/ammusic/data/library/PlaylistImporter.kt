@@ -30,14 +30,14 @@ class PlaylistImporter @Inject constructor(
     suspend fun importFromUrl(url: String, onProgress: (Int, Int) -> Unit = { _, _ -> }): String? = withContext(Dispatchers.IO) {
         val trimmed = url.trim()
         when {
-            trimmed.contains("spotify.com") -> importSpotify(trimmed, onProgress)
-            trimmed.contains("youtube.com") || trimmed.contains("youtu.be") -> importYouTube(trimmed)
+            trimmed.contains("spotify") -> importSpotify(trimmed, onProgress)
+            trimmed.contains("youtube") || trimmed.contains("youtu.be") -> importYouTube(trimmed)
             else -> null
         }
     }
 
     private suspend fun importSpotify(url: String, onProgress: (Int, Int) -> Unit): String? {
-        val idMatcher = Pattern.compile("playlist/([a-zA-Z0-9]+)").matcher(url)
+        val idMatcher = Pattern.compile("playlist[/:]([a-zA-Z0-9]+)").matcher(url)
         val playlistId = if (idMatcher.find()) idMatcher.group(1) else return null
         val embedUrl = "https://open.spotify.com/embed/playlist/$playlistId"
 

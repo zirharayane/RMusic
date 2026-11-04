@@ -10,6 +10,7 @@ import android.media.AudioManager
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
@@ -113,19 +114,109 @@ fun rememberPlayerColors(artworkUrl: String?, stiffness: Float = 18f): PlayerCol
 
 @Composable
 fun PlayerBackdrop(colors: PlayerColors, modifier: Modifier = Modifier) {
-    val drift = rememberInfiniteTransition(label = "backdrop")
-    val a by drift.animateFloat(0f, 1f, infiniteRepeatable(tween(19_000, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "a")
-    val b by drift.animateFloat(0f, 1f, infiniteRepeatable(tween(27_000, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "b")
-    val current by rememberUpdatedState(colors)
+    val transition = rememberInfiniteTransition(label = "waterEffect")
+    val phase1 by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2.0 * Math.PI).toFloat(),
+        animationSpec = infiniteRepeatable(tween(7000, easing = LinearEasing), RepeatMode.Restart),
+        label = "phase1"
+    )
+    val phase2 by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2.0 * Math.PI).toFloat(),
+        animationSpec = infiniteRepeatable(tween(11000, easing = LinearEasing), RepeatMode.Restart),
+        label = "phase2"
+    )
+    val phase3 by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2.0 * Math.PI).toFloat(),
+        animationSpec = infiniteRepeatable(tween(16000, easing = LinearEasing), RepeatMode.Restart),
+        label = "phase3"
+    )
+
+    val orange = Color(0xFFFF6B00)
+    val orangeSoft = Color(0x99FF6B00)
+    val whiteSoft = Color(0x35FFFFFF)
+    val black = Color(0xFF000000)
+
     Canvas(modifier.fillMaxSize()) {
-        val c = current
-        drawRect(c.base)
-        val radius = size.maxDimension * 0.75f
-        val first = Offset(lerp(size.width * 0.1f, size.width * 0.9f, a), lerp(size.height * 0.05f, size.height * 0.35f, b))
-        drawRect(Brush.radialGradient(listOf(c.glow, c.glow.copy(alpha = 0f)), first, radius))
-        val second = Offset(lerp(size.width * 0.95f, size.width * 0.05f, b), lerp(size.height * 0.95f, size.height * 0.55f, a))
-        drawRect(Brush.radialGradient(listOf(c.shade, c.shade.copy(alpha = 0f)), second, radius))
-        drawRect(Brush.verticalGradient(listOf(Color.Transparent, Color(0x52000000))))
+        val w = size.width
+        val h = size.height
+
+        // 1. Pure OLED Black base
+        drawRect(black)
+
+        // 2. Primary floating Electric Orange liquid blob
+        val blob1X = w * (0.35f + 0.25f * kotlin.math.sin(phase1))
+        val blob1Y = h * (0.28f + 0.15f * kotlin.math.cos(phase2))
+        val radius1 = size.maxDimension * (0.55f + 0.08f * kotlin.math.sin(phase3))
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(orangeSoft, orange.copy(alpha = 0.20f), Color.Transparent),
+                center = Offset(blob1X, blob1Y),
+                radius = radius1,
+            ),
+            center = Offset(blob1X, blob1Y),
+            radius = radius1,
+        )
+
+        // 3. Fluid liquid white water ripple
+        val blob2X = w * (0.65f + 0.20f * kotlin.math.cos(phase1))
+        val blob2Y = h * (0.58f + 0.16f * kotlin.math.sin(phase2))
+        val radius2 = size.maxDimension * (0.42f + 0.06f * kotlin.math.cos(phase3))
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(whiteSoft, Color(0x12FFFFFF), Color.Transparent),
+                center = Offset(blob2X, blob2Y),
+                radius = radius2,
+            ),
+            center = Offset(blob2X, blob2Y),
+            radius = radius2,
+        )
+
+        // 4. Secondary deep orange fluid water wave
+        val blob3X = w * (0.50f + 0.28f * kotlin.math.sin(phase2))
+        val blob3Y = h * (0.76f + 0.14f * kotlin.math.cos(phase1))
+        val radius3 = size.maxDimension * (0.58f + 0.10f * kotlin.math.sin(phase2))
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(Color(0x80FF8533), Color(0x18FF6B00), Color.Transparent),
+                center = Offset(blob3X, blob3Y),
+                radius = radius3,
+            ),
+            center = Offset(blob3X, blob3Y),
+            radius = radius3,
+        )
+
+        // 5. Flowing water sine wave
+        val wavePath = Path()
+        val waveY = h * 0.42f
+        wavePath.moveTo(0f, waveY)
+        val steps = 24
+        for (i in 0..steps) {
+            val px = w * (i.toFloat() / steps)
+            val py = waveY + (h * 0.04f) * kotlin.math.sin((i.toFloat() / steps) * 4f + phase1)
+            wavePath.lineTo(px, py)
+        }
+        wavePath.lineTo(w, h)
+        wavePath.lineTo(0f, h)
+        wavePath.close()
+
+        drawPath(
+            path = wavePath,
+            brush = Brush.verticalGradient(
+                colors = listOf(Color(0x15FFFFFF), Color(0x22FF6B00), Color(0x99000000)),
+                startY = waveY - 40f,
+                endY = h,
+            )
+        )
+
+        // 6. Contrast control gradient overlay
+        drawRect(
+            Brush.verticalGradient(
+                listOf(Color(0x66000000), Color.Transparent, Color(0xBB000000))
+            )
+        )
     }
 }
 

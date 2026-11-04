@@ -16,8 +16,8 @@ android {
         applicationId = "app.ammusic"
         minSdk = 28
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.4"
+        versionCode = 7
+        versionName = "1.5.1"
     }
 
     val keystoreFile = rootProject.file("keystore.properties")
@@ -49,6 +49,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

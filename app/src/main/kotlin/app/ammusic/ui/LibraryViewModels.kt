@@ -10,6 +10,8 @@ import app.ammusic.youtube.model.YtPlaylist
 import app.ammusic.youtube.model.YtSession
 import app.ammusic.youtube.model.YtTrack
 import app.ammusic.data.library.PlaylistImporter
+import app.ammusic.data.cloud.SupabaseSyncManager
+import app.ammusic.youtube.model.YtAccount
 import app.ammusic.youtube.tr
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
@@ -52,8 +54,11 @@ class LibraryViewModel @Inject constructor(
     private val downloads: DownloadRepository,
     private val importer: PlaylistImporter,
     store: AccountStore,
+    cloudSync: SupabaseSyncManager,
 ) : ViewModel() {
-    val account = store.account
+    val account: StateFlow<YtAccount?> = combine(store.account, cloudSync.currentUser) { yt, cloud ->
+        yt ?: cloud?.let { YtAccount(it.name ?: it.email ?: "Discord User", it.email, it.avatarUrl) }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val liked = library.liked.shared()
     val history = library.history.shared()
     val albums = library.albums.shared()

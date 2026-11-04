@@ -100,6 +100,8 @@ fun SettingsScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val cacheBytes by viewModel.cacheBytes.collectAsStateWithLifecycle()
     val downloadBytes by viewModel.downloadBytes.collectAsStateWithLifecycle()
+    val updateAvailable by viewModel.updateAvailable.collectAsStateWithLifecycle()
+    val updateProgress by viewModel.updateProgress.collectAsStateWithLifecycle()
 
     LargeTitleScreen(
         title = tr("Réglages", "Settings"),
@@ -199,6 +201,83 @@ fun SettingsScreen(
                 Action(tr("Exporter dans un fichier", "Export to a file")) { exporter.launch(viewModel.backupName()) }
                 Divider()
                 Action(tr("Restaurer une sauvegarde", "Restore a backup")) { importer.launch(arrayOf("application/json", "application/octet-stream", "text/plain")) }
+            }
+        }
+
+        item(key = "updates") {
+            val progress = updateProgress
+            val info = updateAvailable
+            Group(header = tr("Mises à jour", "Updates")) {
+                if (info != null) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                    ) {
+                        AmText(
+                            text = tr("Mise à jour v${info.versionName} disponible !", "Update v${info.versionName} available!"),
+                            style = AmTheme.type.headline.copy(fontWeight = FontWeight.Bold),
+                            color = colors.accent,
+                        )
+                        if (info.changelog.isNotBlank()) {
+                            AmText(
+                                text = info.changelog,
+                                style = AmTheme.type.footnote,
+                                color = colors.textSecondary,
+                                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+                            )
+                        }
+                        if (progress != null) {
+                            AmText(
+                                text = tr("Téléchargement : ${(progress * 100).toInt()}%", "Downloading: ${(progress * 100).toInt()}%"),
+                                style = AmTheme.type.footnote,
+                                color = colors.accent,
+                            )
+                        } else {
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(44.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(colors.accent)
+                                    .pressable(haptic = true, label = "Update") {
+                                        viewModel.startUpdate(info)
+                                    },
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                AmText(tr("Installer maintenant", "Install now"), style = AmTheme.type.headline.copy(fontWeight = FontWeight.Bold), color = Color.White)
+                            }
+                        }
+                    }
+                } else {
+                    Action(tr("Rechercher des mises à jour", "Check for updates")) {
+                        viewModel.checkForUpdates()
+                    }
+                }
+            }
+        }
+
+        if (cloudUser != null) {
+            item(key = "bigSignOut") {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp)
+                        .height(52.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFFE53935))
+                        .pressable(haptic = true, label = tr("Se déconnecter", "Log out")) {
+                            viewModel.signOutCloud()
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    AmText(
+                        text = tr("Se déconnecter", "Log Out"),
+                        style = AmTheme.type.headline.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White,
+                    )
+                }
             }
         }
 
@@ -418,26 +497,24 @@ private fun CloudAccountCard(
                 Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
                     AmText(user.name ?: user.email ?: "Utilisateur", style = AmTheme.type.section.copy(fontWeight = FontWeight.SemiBold), maxLines = 1)
                     AmText(
-                        if (isSyncing) tr("Synchronisation en cours…", "Syncing…") else tr("Playlists synchronisées", "Playlists synced"),
+                        if (isSyncing) tr("Synchronisation en cours…", "Syncing…") else tr("Playlists & titres synchronisés", "Playlists & tracks synced"),
                         style = AmTheme.type.footnote,
                         color = if (isSyncing) colors.accent else colors.textSecondary,
                         maxLines = 1,
                     )
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    IconButton(
-                        AmIcons.Repeat,
-                        label = tr("Synchroniser", "Sync"),
-                        onClick = onSyncNow,
-                        tint = colors.accent,
-                        iconSize = 20.dp,
-                    )
-                    IconButton(
-                        AmIcons.Close,
-                        label = tr("Déconnexion", "Sign out"),
-                        onClick = onSignOut,
-                        tint = colors.textSecondary,
-                        iconSize = 20.dp,
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(colors.accent.copy(alpha = 0.15f))
+                        .pressable(haptic = true, label = "Sync", onClick = onSyncNow)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    AmText(
+                        text = if (isSyncing) tr("Sync…", "Sync…") else tr("Cloud Actif", "Cloud Synced"),
+                        style = AmTheme.type.footnote.copy(fontWeight = FontWeight.Bold),
+                        color = colors.accent,
                     )
                 }
             }

@@ -9,6 +9,8 @@ import app.ammusic.data.library.LibraryRepository
 import app.ammusic.data.downloads.DownloadRepository
 import app.ammusic.data.Backup
 import app.ammusic.data.cloud.SupabaseSyncManager
+import app.ammusic.data.update.AppUpdateManager
+import app.ammusic.data.update.UpdateInfo
 import android.net.Uri
 import app.ammusic.youtube.tr
 import app.ammusic.playback.PlayerController
@@ -32,18 +34,35 @@ class SettingsViewModel @Inject constructor(
     private val downloads: DownloadRepository,
     private val backup: Backup,
     val cloudSync: SupabaseSyncManager,
+    val updateManager: AppUpdateManager,
 ) : ViewModel() {
     val settings = UserSettings.state
     val sleep = player.sleep
     val downloadBytes = downloads.bytes
     val cloudUser = cloudSync.currentUser
     val isCloudSyncing = cloudSync.isSyncing
+    val updateAvailable = updateManager.updateAvailable
+    val updateProgress = updateManager.downloadProgress
 
     private val _cacheBytes = MutableStateFlow(0L)
     val cacheBytes: StateFlow<Long> = _cacheBytes.asStateFlow()
 
     init {
         measureCache()
+    }
+
+    fun checkForUpdates() {
+        viewModelScope.launch {
+            updateManager.checkUpdate(silent = false)
+        }
+    }
+
+    fun startUpdate(info: UpdateInfo) {
+        updateManager.startDownloadAndInstall(info)
+    }
+
+    fun dismissUpdate() {
+        updateManager.dismissUpdate()
     }
 
     fun syncCloud() = cloudSync.triggerFullSync()

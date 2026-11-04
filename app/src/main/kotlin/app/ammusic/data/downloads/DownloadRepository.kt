@@ -84,6 +84,19 @@ class DownloadRepository @Inject constructor(
             if (dao.pendingDownloadCount() > 0) start()
             completed.filterNot(lyrics::isKept).forEach { id -> dao.track(id)?.toTrack()?.let { runCatching { lyrics.keep(it) } } }
         }
+        scope.launch {
+            var previousLikedIds: Set<String>? = null
+            library.liked.collect { likedList ->
+                val currentIds = likedList.map { it.id }.toSet()
+                if (previousLikedIds != null && UserSettings.current.autoDownloadLiked) {
+                    val newTracks = likedList.filter { it.id !in previousLikedIds!! && it.id !in completed }
+                    if (newTracks.isNotEmpty()) {
+                        download(newTracks)
+                    }
+                }
+                previousLikedIds = currentIds
+            }
+        }
     }
 
     fun fileFor(trackId: String): File? = File(dir, fileName(trackId)).takeIf { trackId in completed && it.exists() }

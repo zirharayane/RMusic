@@ -21,6 +21,7 @@ class AppActions(
     val preview: (YtTrack, List<MenuAction>, Rect?) -> Unit,
     val sheet: (MenuRequest) -> Unit,
     val prompt: (title: String, initial: String, thumbnail: String?, onConfirm: (String) -> Unit) -> Unit,
+    val promptCustom: (title: String, initial: String, thumbnail: String?, placeholder: String?, actionLabel: String?, onConfirm: (String) -> Unit) -> Unit = { title, initial, thumbnail, _, _, onConfirm -> prompt(title, initial, thumbnail, onConfirm) },
     val openLibrary: (kind: String) -> Unit,
     val openLogin: () -> Unit,
     val openMood: (YtMood) -> Unit,
