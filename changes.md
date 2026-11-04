@@ -349,3 +349,24 @@
   - Rebuilt debug APK: `app-debug.apk` (57.7 MB) and verified with `aapt2 dump badging` (`versionCode='9' versionName='1.5.3'`).
   - Deployed `rmusic-update.json` (`versionCode: 9`, `v1.5.3`) to Cloudflare Workers (`music.rayane.top/rmusic-update.json`).
   - Committed and pushed changes to both `RMusic-web` and `RMusic` mobile repositories.
+
+
+## Spotify Album Importer, Personalized Home Feed & Followed Artists Mixes (v1.5.4)
+- **Spotify Importer Expansion (`PlaylistImporter.kt`, `LibraryViewModels.kt`)**:
+  - Added support for Spotify Album URLs (`open.spotify.com/album/<id>`), EPs, and singles (e.g. `tesla (slowed electro mix)`).
+  - Embed endpoint extraction parses `__NEXT_DATA__` for `trackList` items and album names.
+  - Added URL parameter sanitization (extracting pure link before query parameters like `si`, `utm_source`, `pi`).
+  - Added detection and clear user messaging for private or collaborative invite links (`pt=...`) that require Spotify authentication.
+  - Upgraded `importFromUrl` to return `ImportResult` (Success with track count and title, or descriptive Error) so announcements are informative and actionable.
+- **Personalized Home Feed (`HomeViewModel.kt`, `HomeScreen.kt`)**:
+  - Injected `LibraryRepository` into `HomeViewModel`.
+  - **History-Based Quick Picks**: When user history or liked songs exist, "Quick picks" dynamically populates from recent plays and liked songs, supplemented with similar tracks via `YouTubeMusic.radio(seedTrack.id)`.
+  - **Followed Artists Carousel**: Followed artists (`LibraryDao.artists()`) are displayed in a dedicated carousel with circular artist portraits.
+  - **Artist Top Mixes & Stations**: Parallel searches for `${artist.title} Mix` generate customized mix playlists for the user's top followed artists, mirroring Spotify's "Your Top Mixes" and "Recommended Stations".
+  - **Regional Filter**: When personalized data is available, generic regional charts (e.g. "All Hits" / classic regional playlists) are filtered out, keeping the home screen tailored to the user's music taste.
+  - **Cold-Start Fallback**: If a user has no listening history or followed artists yet, the app gracefully falls back to curated global charts.
+- **Verification & Deployment**:
+  - Bumped `versionCode = 10` and `versionName = "1.5.4"` in `app/build.gradle.kts`.
+  - Rebuilt debug APK: `app-debug.apk` (57.7 MB) and verified with `aapt2 dump badging` (`versionCode='10' versionName='1.5.4' platformBuildVersionName='17'`).
+  - Deployed `rmusic-update.json` (`versionCode: 10`, `v1.5.4`) to Cloudflare Workers (`music.rayane.top`).
+  - Updated web binaries at `E:\Projects\RMusic web\binaries\RMusic.apk`.

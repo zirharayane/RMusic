@@ -100,13 +100,15 @@ class LibraryViewModel @Inject constructor(
 
     fun importPlaylist(url: String, then: (String) -> Unit = {}) {
         viewModelScope.launch {
-            library.announce(tr("Importation en cours…", "Importing playlist…"))
-            val id = importer.importFromUrl(url)
-            if (id != null) {
-                library.announce(tr("Playlist importée !", "Playlist imported!"))
-                then(id)
-            } else {
-                library.announce(tr("Échec de l'importation", "Import failed"), failed = true)
+            library.announce(tr("Importation en cours…", "Importing…"))
+            when (val result = importer.importFromUrl(url)) {
+                is app.ammusic.data.library.ImportResult.Success -> {
+                    library.announce(tr("« ${result.title} » importée (${result.trackCount} titres) !", "“${result.title}” imported (${result.trackCount} songs)!"))
+                    then(result.playlistId)
+                }
+                is app.ammusic.data.library.ImportResult.Error -> {
+                    library.announce(result.message, failed = true)
+                }
             }
         }
     }

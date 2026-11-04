@@ -127,7 +127,7 @@ fun HomeScreen(onProfile: () -> Unit, viewModel: HomeViewModel = hiltViewModel()
                 }
 
                 is HomeState.Content -> {
-                    val hero = current.sections.indexOfFirst { section -> section.items.none { it is YtTrack } }
+                    val hero = current.sections.indexOfFirst { section -> section.items.none { it is YtTrack || it is YtArtist } }
                     current.sections.forEachIndexed { index, section ->
                         item(key = "header$index", contentType = "header") {
                             SectionHeader(section.title, top = if (index == 0) 8.dp else 32.dp)

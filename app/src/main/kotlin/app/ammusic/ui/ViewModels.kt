@@ -9,10 +9,13 @@ import app.ammusic.data.lyrics.Lyrics
 import app.ammusic.data.lyrics.LyricsRepository
 import app.ammusic.data.library.LibraryRepository
 import app.ammusic.data.lyrics.Translation
+import app.ammusic.youtube.YouTubeMusic
 import app.ammusic.youtube.isFrench
+import app.ammusic.youtube.tr
 import app.ammusic.playback.PlayerController
 import app.ammusic.youtube.model.YtItem
 import app.ammusic.youtube.model.YtMood
+import app.ammusic.youtube.model.YtPlaylist
 import app.ammusic.youtube.model.YtSearchFilter
 import app.ammusic.youtube.model.YtSection
 import app.ammusic.youtube.model.YtTrack
@@ -127,7 +130,11 @@ sealed interface HomeState {
 }
 
 @HiltViewModel
-class HomeViewModel @Inject constructor(private val repository: MusicRepository, account: AccountStore) : ViewModel() {
+class HomeViewModel @Inject constructor(
+    private val repository: MusicRepository,
+    private val library: LibraryRepository,
+    account: AccountStore,
+) : ViewModel() {
     private val _state = MutableStateFlow<HomeState>(HomeState.Loading)
     val state: StateFlow<HomeState> = _state.asStateFlow()
 
@@ -139,11 +146,92 @@ class HomeViewModel @Inject constructor(private val repository: MusicRepository,
     fun load() {
         _state.value = HomeState.Loading
         viewModelScope.launch {
-            val moods = async { repository.moods().getOrDefault(emptyList()) }
-            _state.value = repository.home().fold(
-                onSuccess = { HomeState.Content(it, moods.await()) },
-                onFailure = { HomeState.Error },
-            )
+            val moodsDeferred = async { repository.moods().getOrDefault(emptyList()) }
+            val defaultSectionsDeferred = async { repository.home().getOrDefault(emptyList()) }
+
+            val history = try { library.history.first() } catch (_: Exception) { emptyList() }
+            val liked = try { library.liked.first() } catch (_: Exception) { emptyList() }
+            val artists = try { library.artists.first() } catch (_: Exception) { emptyList() }
+
+            val defaultSections = defaultSectionsDeferred.await()
+            val finalSections = mutableListOf<YtSection>()
+
+            val hasUserData = history.isNotEmpty() || liked.isNotEmpty()
+
+            // 1. Personalized "Quick picks"
+            if (hasUserData) {
+                val candidateTracks = (history.distinctBy { it.id }.take(9) + liked.distinctBy { it.id }.take(9)).distinctBy { it.id }.toMutableList()
+
+                // Fetch similar songs from radio based on the most recent track
+                val seedTrack = history.firstOrNull() ?: liked.firstOrNull()
+                if (seedTrack != null) {
+                    try {
+                        val similar = YouTubeMusic.radio(seedTrack.id).getOrNull()
+                            ?.filter { it.id != seedTrack.id }
+                            ?.take(6)
+                            .orEmpty()
+                        candidateTracks.addAll(similar)
+                    } catch (_: Exception) {}
+                }
+
+                val quickPicks = candidateTracks.distinctBy { it.id }.take(12)
+                if (quickPicks.isNotEmpty()) {
+                    finalSections.add(YtSection(tr("Sélection rapide", "Quick picks"), quickPicks))
+                }
+            } else {
+                // Cold-start fallback: keep default first section
+                defaultSections.firstOrNull()?.let { finalSections.add(it) }
+            }
+
+            // 2. Personalized "Followed Artists" & Mixes
+            if (artists.isNotEmpty()) {
+                finalSections.add(
+                    YtSection(
+                        tr("Vos artistes favoris", "Artists you follow"),
+                        artists.take(15),
+                    ),
+                )
+
+                // Fetch mixes / radio for up to 4 top followed artists
+                val artistMixes = mutableListOf<YtItem>()
+                for (artist in artists.take(4)) {
+                    try {
+                        val searchPage = YouTubeMusic.search("${artist.title} Mix", YtSearchFilter.Playlists).getOrNull()
+                        val mixPlaylist = searchPage?.items?.filterIsInstance<YtPlaylist>()?.firstOrNull()
+                        if (mixPlaylist != null) {
+                            artistMixes.add(mixPlaylist)
+                        }
+                    } catch (_: Exception) {}
+                }
+                if (artistMixes.isNotEmpty()) {
+                    finalSections.add(
+                        YtSection(
+                            tr("Mix de vos artistes", "Your artist mixes"),
+                            artistMixes,
+                        ),
+                    )
+                }
+            }
+
+            // 3. Add remaining curated sections from defaultSections, filtering out unwanted generic regional hits
+            val defaultToInclude = defaultSections.drop(if (hasUserData) 1 else 0).filter { section ->
+                val titleLower = section.title.lowercase()
+                if (hasUserData || artists.isNotEmpty()) {
+                    !titleLower.contains("all hits") &&
+                        !titleLower.contains("zaman") &&
+                        !titleLower.contains("orient") &&
+                        !titleLower.contains("shaabi")
+                } else {
+                    true
+                }
+            }
+            finalSections.addAll(defaultToInclude)
+
+            _state.value = if (finalSections.isNotEmpty()) {
+                HomeState.Content(finalSections, moodsDeferred.await())
+            } else {
+                HomeState.Error
+            }
         }
     }
 }
