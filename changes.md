@@ -311,17 +311,19 @@
   - Verified APK badging: `package: name='app.ammusic' versionCode='6' versionName='1.5.0'`.
   - Copied updated APK to `E:\Projects\RMusic web\binaries\RMusic.apk`.
 
-## Production Release Publication (v1.5.1)
-- **Database Permissions Verified**:
-  - Verified Supabase `public.liked_tracks` endpoint returns HTTP 200 with empty array (`[]`) following user execution of `GRANT` statements. Error 42501 eliminated.
-- **OTA Manifest Published (`music.rayane.top`)**:
-  - Updated `rmusic-update.json` with `versionCode: 7`, `versionName: "1.5.1"`, and release changelog.
-  - Rebuilt web distribution and pushed commit to `RMusic-web` on GitHub.
-  - Verified live endpoint `https://music.rayane.top/rmusic-update.json` serving v1.5.1.
-- **GitHub Release v1.5.1 Created & Assets Uploaded**:
-  - Created and pushed git tag `v1.5.1`.
-  - Pushed all source modifications to `main` branch.
-  - Published GitHub release **`v1.5.1`** (`RMusic v1.5.1 - Cloud Sync & In-App Updater Fix`).
-  - Uploaded fresh Android release binary **`RMusic.apk`** (57.7 MB, versionCode 7) to release assets.
-  - Uploaded Windows desktop installer **`RMusic-Setup.exe`** (76.3 MB) to release assets.
-  - Verified `https://github.com/zirharayane/RMusic/releases/latest/download/RMusic.apk` resolves to `v1.5.1`.
+## Production Release Publication (v1.5.2) — Spotify Importer & Notice Fix
+- **Root Cause of "Import Failed with Checkmark"**:
+  1. `LibraryRepository.announce(text)` lacked a `failed` parameter and unconditionally passed `failed = false` to `LibraryNotice`. When `LibraryViewModels` announced `"Import failed"`, the UI component `NoticeHost` rendered `AmIcons.Check` (checkmark) instead of `AmIcons.Close` (✕ icon).
+  2. Spotify mobile share links often use shortlinks (`spotify.link` / `spoti.fi`) or wrap the URL in text ("Check out this playlist..."). `PlaylistImporter` previously attempted direct regex matching on the raw string and failed to follow HTTP redirects, rejecting shortlinks before any network call.
+  3. User playlists occasionally return empty `trackList` on embed endpoints (`open.spotify.com/embed/playlist/...`).
+- **Fixes Applied**:
+  - **Notice Host Icon Alignment (`LibraryRepository.kt`, `LibraryViewModels.kt`)**: Added `announce(text, failed = false)`. In `LibraryViewModels.importPlaylist`, passed `failed = true` on failure so `NoticeHost` displays the red/gray ✕ icon and triggers long-press haptic feedback.
+  - **Full Spotify Link Resolution (`PlaylistImporter.kt`)**:
+    - Automatically follows HTTP 301/302 redirects for `spotify.link` and `spoti.fi` shortlinks.
+    - Upgraded primary scraping to decode the base64 `initialState` payload directly from `open.spotify.com/playlist/<id>` for complete, unfiltered track lists.
+    - Maintained fallback to `__NEXT_DATA__` embed parsing and oEmbed for title fallback.
+- **Release Assets Published**:
+  - Bumped version to `versionCode = 8` (`v1.5.2`) in `app/build.gradle.kts`.
+  - Rebuilt APK: `app-debug.apk` (57.7 MB, versionCode 8).
+  - Deployed `rmusic-update.json` with `versionCode: 8` (`v1.5.2`) to `music.rayane.top`.
+  - Published GitHub release **`v1.5.2`** with updated `RMusic.apk` and `RMusic-Setup.exe`.
